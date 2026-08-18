@@ -1,0 +1,9 @@
+# Example GCS Backend Configuration for Remote State Storage
+# Rename this file to backend.tf and replace the bucket name before running `terraform init`
+
+# terraform {
+#   backend "gcs" {
+#     bucket = "prj-jmc-devsecops-tfstate-kd"
+#     prefix = "terraform/state/gke-autopilot"
+#   }
+# }
