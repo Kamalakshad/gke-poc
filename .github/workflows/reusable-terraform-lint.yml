@@ -2,6 +2,7 @@ name: "Reusable Terraform Lint & Validate"
 
 on:
   workflow_call:
+  workflow_dispatch:
     inputs:
       terraform_version:
         description: "Terraform version to use"
