@@ -1,0 +1,72 @@
+name: "Ops - Manual Infrastructure Pipeline"
+
+on:
+  workflow_dispatch:
+    inputs:
+      action:
+        description: "Action to perform"
+        required: true
+        type: choice
+        options:
+          - plan
+          - apply
+          - destroy
+        default: "plan"
+      environment:
+        description: "Target environment"
+        required: true
+        type: string
+        default: "poc"
+      destroy_confirmation:
+        description: "Type 'DESTROY' to confirm destruction (only used if action is destroy)"
+        required: false
+        type: string
+        default: ""
+
+permissions:
+  contents: read
+  id-token: write
+  pull-requests: write
+  issues: write
+
+jobs:
+  plan:
+    name: "Manual Plan"
+    if: ${{ inputs.action == 'plan' }}
+    uses: ./.github/workflows/reusable-terraform-plan.yml
+    with:
+      terraform_version: "1.9.0"
+      working_directory: "."
+      var_file: "terraform.tfvars"
+      environment: ${{ inputs.environment }}
+      enable_pr_comment: false
+    secrets:
+      workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+      service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+
+  apply:
+    name: "Manual Apply"
+    if: ${{ inputs.action == 'apply' }}
+    uses: ./.github/workflows/reusable-terraform-apply.yml
+    with:
+      terraform_version: "1.9.0"
+      working_directory: "."
+      var_file: "terraform.tfvars"
+      environment: ${{ inputs.environment }}
+    secrets:
+      workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+      service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+
+  destroy:
+    name: "Manual Destroy"
+    if: ${{ inputs.action == 'destroy' }}
+    uses: ./.github/workflows/reusable-terraform-destroy.yml
+    with:
+      terraform_version: "1.9.0"
+      working_directory: "."
+      var_file: "terraform.tfvars"
+      environment: ${{ inputs.environment }}
+      confirmation: ${{ inputs.destroy_confirmation }}
+    secrets:
+      workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+      service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}

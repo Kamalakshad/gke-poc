@@ -1,0 +1,153 @@
+name: "Reusable Terraform Plan"
+
+on:
+  workflow_call:
+    inputs:
+      terraform_version:
+        description: "Terraform version to use"
+        type: string
+        default: "1.9.0"
+        required: false
+      working_directory:
+        description: "Root directory containing Terraform files"
+        type: string
+        default: "."
+        required: false
+      var_file:
+        description: "Path to .tfvars file (optional)"
+        type: string
+        default: "terraform.tfvars"
+        required: false
+      environment:
+        description: "Target deployment environment"
+        type: string
+        default: "poc"
+        required: false
+      enable_pr_comment:
+        description: "Whether to post/update plan comment on PR"
+        type: boolean
+        default: true
+        required: false
+    secrets:
+      workload_identity_provider:
+        description: "GCP Workload Identity Provider resource name"
+        required: true
+      service_account:
+        description: "GCP Service Account to impersonate"
+        required: true
+
+jobs:
+  plan:
+    name: "Terraform Plan (${{ inputs.environment }})"
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment }}
+    permissions:
+      contents: read
+      id-token: write
+      pull-requests: write
+      issues: write
+
+    defaults:
+      run:
+        working-directory: ${{ inputs.working_directory }}
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Authenticate to Google Cloud (WIF / OIDC)
+        id: gcp-auth
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.workload_identity_provider }}
+          service_account: ${{ secrets.service_account }}
+          token_format: "access_token"
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ inputs.terraform_version }}
+          terraform_wrapper: false
+
+      - name: Terraform Init
+        id: init
+        run: terraform init
+
+      - name: Terraform Plan
+        id: plan
+        run: |
+          VAR_FLAG=""
+          if [ -f "${{ inputs.var_file }}" ]; then
+            VAR_FLAG="-var-file=${{ inputs.var_file }}"
+          fi
+          
+          terraform plan $VAR_FLAG -out=tfplan -no-color | tee plan_output.txt
+        continue-on-error: false
+
+      - name: Generate Plan Summary
+        id: format-plan
+        run: |
+          terraform show -no-color tfplan > plan_summary.txt
+          
+          # Truncate summary if exceeding GitHub comment limits (~65k characters)
+          if [ $(wc -c < plan_summary.txt) -gt 60000 ]; then
+            head -c 60000 plan_summary.txt > plan_truncated.txt
+            echo -e "\n\n...[Plan output truncated due to GitHub character limit]..." >> plan_truncated.txt
+            mv plan_truncated.txt plan_summary.txt
+          fi
+
+      - name: Post / Update PR Comment
+        if: ${{ inputs.enable_pr_comment && github.event_name == 'pull_request' }}
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const fs = require('fs');
+            const path = '${{ inputs.working_directory }}/plan_summary.txt';
+            const planOutput = fs.existsSync(path) ? fs.readFileSync(path, 'utf8') : 'No plan output generated.';
+            
+            const commentIdentifier = `### 🪐 Terraform Plan Output (${{ inputs.environment }})`;
+            const body = `${commentIdentifier}
+            
+            **Commit**: \`${{ github.sha }}\`
+            **Environment**: \`${{ inputs.environment }}\`
+            **Triggered By**: @${{ github.actor }}
+            
+            <details><summary>Show Full Plan</summary>
+            
+            \`\`\`hcl
+            ${planOutput}
+            \`\`\`
+            
+            </details>`;
+            
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+            });
+            
+            const botComment = comments.find(comment => comment.body.includes(commentIdentifier));
+            
+            if (botComment) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: botComment.id,
+                body: body
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body: body
+              });
+            }
+
+      - name: Upload Terraform Plan Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: tfplan-${{ inputs.environment }}-${{ github.sha }}
+          path: ${{ inputs.working_directory }}/tfplan
+          retention-days: 5

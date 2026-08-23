@@ -1,0 +1,96 @@
+name: "Reusable Terraform Lint & Validate"
+
+on:
+  workflow_call:
+    inputs:
+      terraform_version:
+        description: "Terraform version to use"
+        type: string
+        default: "1.9.0"
+        required: false
+      working_directory:
+        description: "Root directory containing Terraform files"
+        type: string
+        default: "."
+        required: false
+      enable_tflint:
+        description: "Whether to run TFLint"
+        type: boolean
+        default: true
+        required: false
+      enable_trivy:
+        description: "Whether to run Trivy security scan"
+        type: boolean
+        default: true
+        required: false
+
+jobs:
+  fmt-and-validate:
+    name: "Format & Validate"
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ${{ inputs.working_directory }}
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ inputs.terraform_version }}
+
+      - name: Terraform Format Check
+        id: fmt
+        run: terraform fmt -check -recursive -diff
+
+      - name: Terraform Init (No Backend)
+        id: init
+        run: terraform init -backend=false
+
+      - name: Terraform Validate
+        id: validate
+        run: terraform validate -no-color
+
+  tflint:
+    name: "TFLint Inspection"
+    if: ${{ inputs.enable_tflint }}
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ${{ inputs.working_directory }}
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup TFLint
+        uses: terraform-linters/setup-tflint@v4
+        with:
+          tflint_version: "latest"
+
+      - name: Init TFLint
+        run: tflint --init
+
+      - name: Run TFLint
+        run: tflint -f compact --recursive
+
+  security-scan:
+    name: "Trivy Security & Misconfig Scan"
+    if: ${{ inputs.enable_trivy }}
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Run Trivy vulnerability scanner in IaC mode
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: "config"
+          hide-progress: true
+          format: "table"
+          exit-code: "0" # Set to 1 to fail PR if critical misconfigs are found
+          severity: "CRITICAL,HIGH"
+          scan-ref: ${{ inputs.working_directory }}

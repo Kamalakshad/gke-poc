@@ -1,0 +1,89 @@
+name: "Reusable Terraform Apply"
+
+on:
+  workflow_call:
+    inputs:
+      terraform_version:
+        description: "Terraform version to use"
+        type: string
+        default: "1.9.0"
+        required: false
+      working_directory:
+        description: "Root directory containing Terraform files"
+        type: string
+        default: "."
+        required: false
+      var_file:
+        description: "Path to .tfvars file (optional)"
+        type: string
+        default: "terraform.tfvars"
+        required: false
+      environment:
+        description: "Target deployment environment"
+        type: string
+        default: "poc"
+        required: false
+    secrets:
+      workload_identity_provider:
+        description: "GCP Workload Identity Provider resource name"
+        required: true
+      service_account:
+        description: "GCP Service Account to impersonate"
+        required: true
+
+jobs:
+  apply:
+    name: "Terraform Apply (${{ inputs.environment }})"
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment }}
+    permissions:
+      contents: read
+      id-token: write
+
+    defaults:
+      run:
+        working-directory: ${{ inputs.working_directory }}
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Authenticate to Google Cloud (WIF / OIDC)
+        id: gcp-auth
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.workload_identity_provider }}
+          service_account: ${{ secrets.service_account }}
+          token_format: "access_token"
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ inputs.terraform_version }}
+          terraform_wrapper: false
+
+      - name: Terraform Init
+        id: init
+        run: terraform init
+
+      - name: Terraform Apply
+        id: apply
+        run: |
+          VAR_FLAG=""
+          if [ -f "${{ inputs.var_file }}" ]; then
+            VAR_FLAG="-var-file=${{ inputs.var_file }}"
+          fi
+          
+          terraform apply -auto-approve -input=false $VAR_FLAG
+
+      - name: Export Outputs to Job Summary
+        id: summary
+        run: |
+          echo "### 🚀 Terraform Apply Succeeded (${{ inputs.environment }})" >> $GITHUB_STEP_SUMMARY
+          echo "**Commit**: \`${{ github.sha }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "**Applied by**: @${{ github.actor }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "#### Outputs:" >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`json" >> $GITHUB_STEP_SUMMARY
+          terraform output -json >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY

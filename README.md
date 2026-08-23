@@ -23,12 +23,24 @@ Production-grade modular Terraform codebase to provision a **Google Kubernetes E
 
 ```text
 .
+├── .github/
+│   ├── README.md                # CI/CD & GCP Workload Identity Federation guide
+│   └── workflows/
+│       ├── reusable-terraform-lint.yml    # Reusable: Format, validate, TFLint & Trivy
+│       ├── reusable-terraform-plan.yml    # Reusable: Plan with PR comment
+│       ├── reusable-terraform-apply.yml   # Reusable: Apply to environment
+│       ├── reusable-terraform-destroy.yml # Reusable: Guarded destroy
+│       ├── pull-request.yml               # Caller: CI for PRs
+│       ├── deploy.yml                     # Caller: CD for main branch
+│       └── manual-ops.yml                 # Caller: Manual dispatch
+├── .tflint.hcl                  # TFLint Google ruleset configuration
 ├── main.tf                      # Root module: orchestrates VPC, IAM, and GKE modules
 ├── variables.tf                 # Global input variables
 ├── outputs.tf                   # Root outputs exposing cluster connection details
 ├── versions.tf                  # Terraform & Google provider constraints
 ├── terraform.tfvars             # Active configuration values
 ├── terraform.tfvars.example     # Reference configuration template
+├── backend.tf                   # GCS remote state backend configuration
 ├── backend.tf.example           # GCS remote state backend template
 ├── design.md                    # Detailed architectural design & IAM matrix
 └── modules/
@@ -104,3 +116,16 @@ Production-grade modular Terraform codebase to provision a **Google Kubernetes E
 - **Cloud NAT**: **~$35.10/mo** ($0.045/hr + egress data).
 - **GKE Autopilot Workloads**: Pay-per-pod resource usage (~$0.0494/vCPU-hr, ~$0.0054/GB-RAM-hr).
 - **VPC, Subnets, Routers, IAM**: **$0.00 (Free)**.
+
+---
+
+## CI/CD Automation (GitHub Actions)
+
+This repository includes a reusable GitHub Actions CI/CD pipeline using **Google Cloud Workload Identity Federation (WIF / OIDC)**:
+
+- **Pull Requests**: Automatically runs formatting check, `terraform validate`, `tflint`, `trivy` security scans, and generates speculative `terraform plan` posted directly to the PR comments.
+- **Main Merges**: Automatically executes `terraform apply` when PRs are merged to `main`.
+- **Manual Operations**: Trigger plan, apply, or guarded teardown (`destroy`) on demand from GitHub Actions tab.
+
+See [.github/README.md](file:///.github/README.md) for full Workload Identity Federation and GitHub Secrets setup instructions.
+

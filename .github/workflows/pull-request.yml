@@ -1,0 +1,41 @@
+name: "CI - Pull Request Pipeline"
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - "**/*.tf"
+      - "**/*.tfvars*"
+      - ".github/workflows/**"
+      - "!**.md"
+
+permissions:
+  contents: read
+  id-token: write
+  pull-requests: write
+  issues: write
+
+jobs:
+  lint:
+    name: "Lint & Validate"
+    uses: ./.github/workflows/reusable-terraform-lint.yml
+    with:
+      terraform_version: "1.9.0"
+      working_directory: "."
+      enable_tflint: true
+      enable_trivy: true
+
+  plan:
+    name: "Plan"
+    needs: [lint]
+    uses: ./.github/workflows/reusable-terraform-plan.yml
+    with:
+      terraform_version: "1.9.0"
+      working_directory: "."
+      var_file: "terraform.tfvars"
+      environment: "poc"
+      enable_pr_comment: true
+    secrets:
+      workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+      service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}

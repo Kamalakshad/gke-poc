@@ -1,0 +1,38 @@
+name: "CD - Deploy to Main"
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "**/*.tf"
+      - "**/*.tfvars*"
+      - ".github/workflows/**"
+      - "!**.md"
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  lint:
+    name: "Lint & Validate"
+    uses: ./.github/workflows/reusable-terraform-lint.yml
+    with:
+      terraform_version: "1.9.0"
+      working_directory: "."
+      enable_tflint: true
+      enable_trivy: false
+
+  apply:
+    name: "Apply"
+    needs: [lint]
+    uses: ./.github/workflows/reusable-terraform-apply.yml
+    with:
+      terraform_version: "1.9.0"
+      working_directory: "."
+      var_file: "terraform.tfvars"
+      environment: "poc"
+    secrets:
+      workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+      service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
