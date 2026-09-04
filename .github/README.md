@@ -27,7 +27,7 @@ To enable GitHub Actions to authenticate to GCP without storing long-lived servi
 
 ### 1. Create Workload Identity Pool & Provider
 ```bash
-export PROJECT_ID="prj-jmc-devsecops"
+export PROJECT_ID="prj-jmc-devsecops"  
 export POOL_NAME="github-actions-pool"
 export PROVIDER_NAME="github-provider"
 export GITHUB_REPO="<YOUR_GITHUB_ORG_OR_USERNAME>/gke-poc"
@@ -35,7 +35,7 @@ export GITHUB_REPO="<YOUR_GITHUB_ORG_OR_USERNAME>/gke-poc"
 # Create WIF Pool
 gcloud iam workload-identity-pools create "$POOL_NAME" \
   --project="$PROJECT_ID" \
-  --location="global" \
+--location="global" \
   --display-name="GitHub Actions Pool"
 
 # Create OIDC Provider
@@ -44,7 +44,8 @@ gcloud iam workload-identity-pools providers create-oidc "$PROVIDER_NAME" \
   --location="global" \
   --workload-identity-pool="$POOL_NAME" \
   --display-name="GitHub Actions Provider" \
-  --attribute-mapping="google.subject=assertion.sub,attribute.actor=assertion.actor,attribute.repository=assertion.repository" \
+  --attribute-mapping="google.subject=assertion.sub,attribute.actor=assertion.actor,attribute.repository=assertion.repository,attribute.repository_owner=assertion.repository_owner" \
+  --attribute-condition="assertion.repository == '$GITHUB_REPO'" \
   --issuer-uri="https://token.actions.githubusercontent.com"
 ```
 
