@@ -123,3 +123,7 @@ Navigate to **GitHub Repo -> Settings -> Secrets and variables -> Actions** and 
    - In GitHub Actions tab, select **Ops - Manual Infrastructure Pipeline**.
    - Choose action (`plan`, `apply`, or `destroy`).
    - If choosing `destroy`, type `DESTROY` in the confirmation box.
+
+
+
+#--Checking
